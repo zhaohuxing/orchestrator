@@ -3666,8 +3666,10 @@ func (this *HttpAPI) registerSingleAPIRequest(m *martini.ClassicMartini, path st
 
 	if allowProxy && config.Config.RaftEnabled {
 		m.Get(fullPath, raftReverseProxy, handler)
+		m.Post(fullPath, raftReverseProxy, handler)
 	} else {
 		m.Get(fullPath, handler)
+		m.Post(fullPath, handler)
 	}
 }
 
@@ -3961,4 +3963,47 @@ func (this *HttpAPI) RegisterRequests(m *martini.ClassicMartini) {
 	} else {
 		m.Get(config.Config.StatusEndpoint, this.StatusCheck)
 	}
+
+	// Audit topology recovery steps
+	this.registerAPIRequest(m, "audit-topology-recovery/:uid/steps", this.AuditTopologyRecoverySteps)
+}
+
+// AuditTopologyRecoverySteps audits a topology recovery step
+func (this *HttpAPI) AuditTopologyRecoverySteps(params martini.Params, r render.Render, req *http.Request, user auth.User) {
+	if !isAuthorizedForAction(req, user) {
+		Respond(r, &APIResponse{Code: ERROR, Message: "Unauthorized"})
+		return
+	}
+
+	uid := params["uid"]
+	if uid == "" {
+		Respond(r, &APIResponse{Code: ERROR, Message: "Missing required parameter: uid"})
+		return
+	}
+
+	var request struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&request); err != nil {
+		Respond(r, &APIResponse{Code: ERROR, Message: fmt.Sprintf("Invalid request: %v", err)})
+		return
+	}
+
+	if request.Message == "" {
+		Respond(r, &APIResponse{Code: ERROR, Message: "Missing required parameter: message"})
+		return
+	}
+
+	// Create a minimal TopologyRecovery object with just the UID
+	topologyRecovery := &logic.TopologyRecovery{
+		UID: uid,
+	}
+
+	err := logic.AuditTopologyRecovery(topologyRecovery, request.Message)
+	if err != nil {
+		Respond(r, &APIResponse{Code: ERROR, Message: fmt.Sprintf("Failed to audit topology recovery: %v", err)})
+		return
+	}
+
+	Respond(r, &APIResponse{Code: OK, Message: "Successfully audited topology recovery"})
 }
