@@ -1,3 +1,19 @@
+# Cross-platform Static Build Guide
+
+If you are on Mac M1/M2 (arm64) or any non-x86_64 platform and need to build a portable orchestrator binary for Linux x86_64 servers, use the following command:
+
+```sh
+docker buildx build --platform linux/amd64 -f Dockerfile.build -o type=local,dest=./build_output .
+```
+
+- The build artifact will be in `./build_output/orchestrator`.
+- The binary is **statically linked** and can run directly on CentOS 7, Ubuntu, or any x86_64 Linux without worrying about glibc version issues.
+- Requires Docker Desktop with buildx support (enabled by default in recent versions).
+
+> If you encounter network issues, you can switch to a different mirror, or refer to comments in Dockerfile.build.
+
+---
+
 ## Repository archived
 
 > [!IMPORTANT]

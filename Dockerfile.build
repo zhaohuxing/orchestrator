@@ -1,0 +1,41 @@
+# Use Alpine Linux, which uses musl libc, to create a fully static binary.
+# This avoids any and all glibc versioning issues and is stable under QEMU.
+FROM --platform=linux/amd64 golang:1.19-alpine AS builder
+
+# Use Aliyun mirror for apk for better reliability (especially in China)
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
+# Update package index
+RUN apk update
+
+# Output available sqlite packages for debugging
+RUN apk search sqlite
+
+# Install build tools and sqlite-dev only
+RUN apk add --no-cache build-base git sqlite-dev
+
+# Set up the application directory
+WORKDIR /orc
+
+# Copy go.mod and go.sum to cache dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the entire source code
+COPY . .
+
+# Build a fully static, CGO-enabled binary.
+# The '-linkmode external -extldflags "-static"' flags are key.
+RUN echo "Building statically linked orchestrator..." && \
+    CGO_ENABLED=1 go build -mod=vendor \
+    -ldflags '-linkmode external -extldflags "-static"' \
+    -o bin/orchestrator go/cmd/orchestrator/main.go && \
+    echo "Build finished." && \
+    # Verify the build result
+    ls -l bin/orchestrator && \
+    file bin/orchestrator
+
+# ---- Stage 2: Final Artifact ----
+# This stage is just for easily extracting the final binary.
+FROM scratch
+COPY --from=builder /orc/bin/orchestrator /orchestrator 
